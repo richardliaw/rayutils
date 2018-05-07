@@ -1,11 +1,10 @@
-Desired work flow
-    - Run autoscaler setup script
-    -  upload experiment run script to machine
-    -  run experiment on setup machine
-    - Save experiment results on s3 when complete?
-    - Kill machine when experiment is done/hangs
+# Ray Utils
+
+Mainly for autoscaling CLI. Will merge upstream if useful...
+To install, run `pip install git+https://github.com/richardliaw/rayutils.git`.
 
 ## Use cases:
+All commands currently need to insert cluster yaml in arg.
 `$(ray2 login_cmd [cluster_yaml])` to log into head node
 
 `ray2 setup` to install self-destruct capabilities on cluster
@@ -13,3 +12,13 @@ Desired work flow
 `ray2 execute [arbitrary] [cmd]` to run an arbitrary command
 
 `ray2 shutdown` on cluster (only!) to self-destruct
+
+
+
+Desired work flow
+    - Run autoscaler setup script
+    -  upload experiment run script to machine
+    -  run experiment on setup machine
+    - Save experiment results on s3 when complete?
+    - Kill machine when experiment is done/hangs
+
