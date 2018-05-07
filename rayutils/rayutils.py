@@ -96,7 +96,7 @@ def setup(cluster_yaml):
     config = yaml.load(open(cluster_yaml).read())
     head_updater = get_head_updater(config)
     git_path = "https://github.com/richardliaw/rayutils.git"
-    head_updater.ssh_cmd("pip install git+" + git_path, verbose=True)
+    head_updater.ssh_cmd("pip install -U git+" + git_path, verbose=True)
 
 
 @click.command()
