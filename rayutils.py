@@ -25,6 +25,9 @@ def cli():
     pass
 
 def get_provider(config):
+    """Returns provider.
+
+    Modifies config"""
     importer = NODE_PROVIDERS.get(config["provider"]["type"])
     if not importer:
         raise NotImplementedError("Unsupported provider {}".format(
@@ -78,6 +81,7 @@ def shutdown():
 @click.argument("cluster_yaml", required=True, type=str)
 @click.argument("cmd", required=True, type=str, nargs=-1)
 def execute(cluster_yaml, cmd):
+    """Executes command on cluster head."""
     config = yaml.load(open(cluster_yaml).read())
     head_updater = get_head_updater(config)
     head_updater.ssh_cmd(" ".join(cmd), verbose=True)
@@ -86,11 +90,29 @@ def execute(cluster_yaml, cmd):
 @click.command()
 @click.argument("cluster_yaml", required=True, type=str)
 def setup(cluster_yaml):
-    """Makes sure utilities are installed on cluster head"""
+    """Makes sure utilities are installed on cluster head.
+
+    Needed for shutdown."""
     config = yaml.load(open(cluster_yaml).read())
     head_updater = get_head_updater(config)
     git_path = "https://github.com/richardliaw/rayutils.git"
-    head_updater.ssh_cmd("pip install git+" + git_path, verbose=True)
+    res = head_updater.ssh_cmd("pip install git+" + git_path, verbose=True)
+    import ipdb; ipdb.set_trace()
+
+
+@click.command()
+@click.argument("cluster_yaml", required=True, type=str)
+def login_cmd(cluster_yaml):
+    """Get login command for the head node"""
+    from contextlib import redirect_stdout
+    with redirect_stdout(open(os.devnull, 'w')):
+        config = yaml.load(open(cluster_yaml).read())
+        head_updater = get_head_updater(config)
+    click.echo("ssh -i {key} {user}@{ip}".format(
+        key=head_updater.ssh_private_key,
+        user=head_updater.ssh_user,
+        ip=head_updater.ssh_ip))
+
 
 
 @click.command()
@@ -112,9 +134,11 @@ def submit(cluster_yaml, shutdown, script_args):
 
     # syncs file to home directory on cluster
     script = script_args[0]
-    remote_dest = os.path.join("~", os.path.basename(script))
+    base_script = os.path.basename(script)
+    remote_dest = os.path.join("~", base_script)
     head_updater.sync_files({remote_dest: script})
-
+    cmd = " ".join(["python", base_script] + list(script_args[1:]))
+    head_updater.ssh_cmd(cmd, verbose=True)
     # # executes script in a separate screen
     # # "screen", "-dm", ""
     # cmds = ["python"] + list(script_args)
@@ -128,5 +152,6 @@ def submit(cluster_yaml, shutdown, script_args):
 
 cli.add_command(shutdown)
 cli.add_command(execute)
+cli.add_command(login_cmd)
 cli.add_command(setup)
 cli.add_command(submit)
