@@ -25,6 +25,12 @@ import yaml
 def cli():
     pass
 
+def load_config(yaml_file_name):
+    config = yaml.load(open(yaml_file_name).read())
+    validate_config(config)
+    return fillout_defaults(config)
+
+
 def get_provider(config):
     """Returns provider.
 
@@ -89,7 +95,7 @@ def shutdown():
 @click.argument("cmd", required=True, type=str, nargs=-1)
 def execute(cluster_yaml, cmd):
     """Executes command on cluster head."""
-    config = yaml.load(open(cluster_yaml).read())
+    config = load_config(cluster_yaml)
     head_updater = get_head_updater(config)
     head_updater.ssh_cmd(" ".join(cmd), verbose=True)
 
@@ -100,7 +106,7 @@ def setup(cluster_yaml):
     """Makes sure utilities are installed on cluster head.
 
     Needed for shutdown."""
-    config = yaml.load(open(cluster_yaml).read())
+    config = load_config(cluster_yaml)
     head_updater = get_head_updater(config)
     git_path = "https://github.com/richardliaw/rayutils.git"
     gitclone = "git clone %s" % git_path
@@ -115,7 +121,7 @@ def login_cmd(cluster_yaml):
     """Get login command for the head node"""
     from contextlib import redirect_stdout
     with redirect_stdout(open(os.devnull, 'w')):
-        config = yaml.load(open(cluster_yaml).read())
+        config = load_config(cluster_yaml)
         head_updater = get_head_updater(config)
     click.echo("ssh -i {key} {user}@{ip}".format(
         key=head_updater.ssh_private_key,
@@ -132,25 +138,30 @@ def login_cmd(cluster_yaml):
 #               help="Terminate cluster if job completes successfully")
 @click.option("--shutdown", is_flag=True, default=False,
               help="Terminate cluster if job completes successfully")
-@click.argument("script_args", required=True, type=str, nargs=-1)
+@click.option("--background", is_flag=True, default=False,
+              help="Runs job in a separate screen.")
+@click.argument("script", required=True, type=str)
+@click.argument("script_args", required=False, type=str, nargs=-1)
 # TODO(rliaw): Terminate if job hangs for x minutes
-def submit(cluster_yaml, shutdown, script_args):
+def submit(cluster_yaml, shutdown, background, script, script_args):
     """Uploads and executes script on cluster"""
     # check that cluster is alive
-    config = yaml.load(open(cluster_yaml).read())
+    config = load_config(cluster_yaml)
     head_updater = get_head_updater(config)
     # check that cluster yaml is on head
 
     # syncs file to home directory on cluster
-    script = script_args[0]
     base_script = os.path.basename(script)
     remote_dest = os.path.join("~", base_script)
     head_updater.sync_files({remote_dest: script})
-    cmd = ["python", base_script] + list(script_args[1:])
+    cmd_list = ["python", base_script] + list(script_args)
     if shutdown:
-        cmd += ["&&", "ray2", "shutdown"]
-    cmd = ["screen", "-dm"] + cmd
-    head_updater.ssh_cmd(" ".join(cmd), verbose=True)
+        cmd_list += ["&&", "ray2", "shutdown"]
+    cmd = " ".join(cmd_list)
+    if background:
+        bg_cmd_list = ["screen", "-dm", "bash", "-c"] + [pipes.quote(cmd)]
+        cmd = " ".join(bg_cmd_list)
+    head_updater.ssh_cmd(cmd, verbose=True)
     # # executes script in a separate screen
 
     # head_updater.ssh_cmd(cmd, verbose=True)
