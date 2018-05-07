@@ -5,6 +5,7 @@ from __future__ import print_function
 import click
 import json
 import subprocess
+import os
 
 import ray.services as services
 from ray.autoscaler.commands import (create_or_update_cluster,
@@ -23,13 +24,19 @@ import yaml
 def cli():
     pass
 
+def get_provider(config):
+    importer = NODE_PROVIDERS.get(config["provider"]["type"])
+    if not importer:
+        raise NotImplementedError("Unsupported provider {}".format(
+            config["provider"]))
 
-@click.command()
-@click.argument("cluster_config_file", required=True, type=str)
-def sync(cluster_config_file):
-    """Only syncs file mounts with entire cluster"""
-    config = yaml.load(open(config_file).read())
-    provider = get_node_provider(config["provider"], config["cluster_name"])
+    bootstrap_config, provider_cls = importer()
+    config = bootstrap_config(config)
+    return provider_cls(config["provider"], config["cluster_name"])
+
+
+def get_head_updater(config):
+    provider = get_provider(config)
     head_node_tags = {
         TAG_RAY_NODE_TYPE: "Head",
     }
@@ -42,8 +49,7 @@ def sync(cluster_config_file):
         sys.exit(1)
 
     runtime_hash = hash_runtime_conf(config["file_mounts"], config)
-
-    updater = NodeUpdaterProcess(
+    return NodeUpdaterProcess(
         head_node,
         config["provider"],
         config["auth"],
@@ -52,43 +58,39 @@ def sync(cluster_config_file):
         [],
         runtime_hash,
         redirect_output=False)
-    updater.sync_files(config["file_mounts"])
 
 
 @click.command()
 def shutdown():
     """Executed on the headnode to terminate cluster"""
-    raise NotImplementedError
-    pass
-    # stop ray
-    pass
-    # terminate workers
-    pass
-    # terminate head
-    pass
+    subprocess.run(["ray", "stop"])
+    with open(os.path.expanduser("~/ray_bootstrap_config.yaml")) as f:
+        cfg = yaml.load(f)
+
+    provider = get_provider(cfg)
+    for instance_id in provider.nodes({"ray:NodeType": "Worker"}):
+        provider.terminate_node(instance_id)
+    for instance_id in provider.nodes({"ray:NodeType": "Head"}):
+        provider.terminate_node(instance_id)
 
 
-def check_cluster(config):
-    provider = get_node_provider(config["provider"], config["cluster_name"])
-    head_node_tags = {
-        TAG_RAY_NODE_TYPE: "Head",
-    }
-    nodes = provider.nodes(head_node_tags)
-    return len(nodes) > 0
+@click.command()
+@click.argument("cluster_yaml", required=True, type=str)
+@click.argument("cmd", required=True, type=str, nargs=-1)
+def execute(cluster_yaml, cmd):
+    config = yaml.load(open(cluster_yaml).read())
+    head_updater = get_head_updater(config)
+    head_updater.ssh_cmd(" ".join(cmd), verbose=True)
 
 
 @click.command()
 @click.argument("cluster_yaml", required=True, type=str)
 def setup(cluster_yaml):
-    """Executed on the headnode to terminate cluster"""
-    config = yaml.load(open(config_file).read())
-    assert is_cluster_up(config), "Cluster not alive!"
-
+    """Makes sure utilities are installed on cluster head"""
+    config = yaml.load(open(cluster_yaml).read())
     head_updater = get_head_updater(config)
-    head_updater.ssh_cmd(["pip", "install", verbose=True)
-
-
-
+    git_path = "https://github.com/richardliaw/rayutils.git"
+    head_updater.ssh_cmd("pip install git+" + git_path, verbose=True)
 
 
 @click.command()
@@ -104,27 +106,27 @@ def setup(cluster_yaml):
 def submit(cluster_yaml, shutdown, script_args):
     """Uploads and executes script on cluster"""
     # check that cluster is alive
-    config = yaml.load(open(config_file).read())
-    assert is_cluster_up(config), "Cluster not alive!"
-
+    config = yaml.load(open(cluster_yaml).read())
     head_updater = get_head_updater(config)
     # check that cluster yaml is on head
 
     # syncs file to home directory on cluster
     script = script_args[0]
     remote_dest = os.path.join("~", os.path.basename(script))
-    updater.sync_files({remote_dest: script})
+    head_updater.sync_files({remote_dest: script})
 
-    # executes script in a separate screen
-    # "screen", "-dm", ""
-    cmds = ["python"] + list(script_args)
-    # if shutdown, appends shutdown command to script
-    if shutdown:
-        cmd += ["&&"] + ["ray2", "shutdown", cluster_yaml_dir]
-    head_updater.ssh_cmd(cmd, verbose=True)
+    # # executes script in a separate screen
+    # # "screen", "-dm", ""
+    # cmds = ["python"] + list(script_args)
+    # # if shutdown, appends shutdown command to script
+    # if shutdown:
+    #     cmd += "&& ray2 shutdown"
+    # head_updater.ssh_cmd(cmd, verbose=True)
 
 
 
 
 cli.add_command(shutdown)
+cli.add_command(execute)
+cli.add_command(setup)
 cli.add_command(submit)
