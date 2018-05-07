@@ -149,13 +149,10 @@ def submit(cluster_yaml, shutdown, script_args):
     cmd = ["python", base_script] + list(script_args[1:])
     if shutdown:
         cmd += ["&&", "ray2", "shutdown"]
+    cmd = ["screen", "-dm"] + cmd
     head_updater.ssh_cmd(" ".join(cmd), verbose=True)
     # # executes script in a separate screen
-    # # "screen", "-dm", ""
-    # cmds = ["python"] + list(script_args)
-    # # if shutdown, appends shutdown command to script
-    # if shutdown:
-    #     cmd += "&& ray2 shutdown"
+
     # head_updater.ssh_cmd(cmd, verbose=True)
 
 
