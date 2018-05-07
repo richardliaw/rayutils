@@ -96,8 +96,7 @@ def setup(cluster_yaml):
     config = yaml.load(open(cluster_yaml).read())
     head_updater = get_head_updater(config)
     git_path = "https://github.com/richardliaw/rayutils.git"
-    res = head_updater.ssh_cmd("pip install git+" + git_path, verbose=True)
-    import ipdb; ipdb.set_trace()
+    head_updater.ssh_cmd("pip install git+" + git_path, verbose=True)
 
 
 @click.command()
@@ -137,8 +136,10 @@ def submit(cluster_yaml, shutdown, script_args):
     base_script = os.path.basename(script)
     remote_dest = os.path.join("~", base_script)
     head_updater.sync_files({remote_dest: script})
-    cmd = " ".join(["python", base_script] + list(script_args[1:]))
-    head_updater.ssh_cmd(cmd, verbose=True)
+    cmd = ["python", base_script] + list(script_args[1:])
+    if shutdown:
+        cmd += ["&&", "ray2", "shutdown"]
+    head_updater.ssh_cmd(" ".join(cmd), verbose=True)
     # # executes script in a separate screen
     # # "screen", "-dm", ""
     # cmds = ["python"] + list(script_args)
