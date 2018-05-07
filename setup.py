@@ -8,6 +8,6 @@ setup(
         'Click',
     ],
     entry_points={
-        "console_scripts": ["ray2=rayutils:cli"]
+        "console_scripts": ["ray2=rayutils.rayutils:cli"]
     }
 )
