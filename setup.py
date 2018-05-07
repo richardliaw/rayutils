@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-    name="ray2",
+    name="rayutils",
     version='0.1',
     install_requires=[
         'ray',
