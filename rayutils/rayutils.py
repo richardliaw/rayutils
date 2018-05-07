@@ -6,6 +6,7 @@ import click
 import json
 import subprocess
 import os
+import sys
 
 import ray.services as services
 from ray.autoscaler.commands import (create_or_update_cluster,
@@ -71,10 +72,16 @@ def shutdown():
         cfg = yaml.load(f)
 
     provider = get_provider(cfg)
+
+    print("Terminating worker instances...")
     for instance_id in provider.nodes({"ray:NodeType": "Worker"}):
         provider.terminate_node(instance_id)
+
+    print("Terminating head instance...")
     for instance_id in provider.nodes({"ray:NodeType": "Head"}):
         provider.terminate_node(instance_id)
+    print("good bye!")
+
 
 
 @click.command()
